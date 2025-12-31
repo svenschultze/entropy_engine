@@ -1,15 +1,15 @@
-# Repository Guidelines
+ï»¿# Repository Guidelines
 
 ## Project Structure & Module Organization
 - `index.html` wires the UI layout, Tailwind CDN, and modal markup.
 - `style.css` holds custom styles layered over Tailwind classes.
-- `game.js` contains the game loop, state, UI wiring, and building logic.
+- `js/` contains ES modules split by responsibility (`main.js`, `game.js`, `render.js`, `ui.js`, `state.js`, etc.).
 
 ## Build, Test, and Development Commands
 - No build step is required; this is a static HTML/CSS/JS project.
-- Run locally with a static server when needed:
+- Run locally with a static server:
   - `python -m http.server` (then open `http://localhost:8000/index.html`).
-- Open `index.html` directly for quick visual checks, but prefer a server for asset caching and consistent canvas behavior.
+- Use a local server (ES modules are blocked on `file://` URLs) to avoid import errors and ensure consistent canvas behavior.
 
 ## Coding Style & Naming Conventions
 - Indentation: 4 spaces; keep semicolons and trailing commas consistent with existing files.
@@ -24,7 +24,7 @@
 - When adding features, include a short manual test checklist in your PR description.
 
 ## Commit & Pull Request Guidelines
-- Git history is not available in this repo; use clear, imperative commit subjects (e.g., “Add condenser tooltip”).
+- Git history is not available in this repo; use clear, imperative commit subjects (e.g., "Add condenser tooltip").
 - PRs should include:
   - What changed and why.
   - Screenshots or short clips for UI/UX changes.
