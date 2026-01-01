@@ -26,6 +26,17 @@ export function recomputePurpleValue() {
 }
 
 export function formatValue(v) {
+    const units = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+    const abs = Math.abs(v);
+    if(abs >= 1_000_000) {
+        let unitIndex = 0;
+        let value = v;
+        while(Math.abs(value) >= 1000 && unitIndex < units.length - 1) {
+            value /= 1000;
+            unitIndex++;
+        }
+        return `${value.toFixed(1)}${units[unitIndex]}`;
+    }
     return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 

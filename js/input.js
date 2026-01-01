@@ -104,6 +104,10 @@ export function setupEventListeners({ onSingularityConfirm }) {
     window.addEventListener('touchcancel', resetInteraction);
 
     window.addEventListener('resize', resizeCanvas);
+    if(window.visualViewport) {
+        window.visualViewport.addEventListener('resize', resizeCanvas);
+        window.visualViewport.addEventListener('scroll', resizeCanvas);
+    }
 
     document.getElementById('tech-btn').onclick = openTechTree;
     document.getElementById('close-tech').onclick = () => document.getElementById('tech-modal').classList.add('hidden');

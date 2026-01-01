@@ -4,8 +4,10 @@ import { ITEMS } from './items.js';
 import { canvas, ctx } from './dom.js';
 
 export function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    canvas.width = vw;
+    canvas.height = vh;
     const minDim = Math.min(canvas.width, canvas.height);
     state.scale = (minDim * 0.9) / (state.width * CONFIG.TILE_SIZE) || 1;
 }
@@ -51,6 +53,9 @@ export function draw() {
 
             if(cell.type !== 'empty' && !cell.type.startsWith('source')) {
                 let c = CONFIG.COLORS[cell.type] || '#fff';
+                if(cell.type === 'miner' && cell.sourceType) {
+                    c = cell.sourceType.color;
+                }
                 ctx.fillStyle = c;
 
                 if(cell.type !== 'core') {

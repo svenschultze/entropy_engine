@@ -1,17 +1,23 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
 
+html, body {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+}
+
 body {
     background-color: #0f0f13;
     color: #e0e0e0;
     font-family: 'Space Mono', monospace;
-    overflow: hidden;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
 }
 
-#game-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+#game-container { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
 
 #ui-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;

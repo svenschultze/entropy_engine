@@ -1,6 +1,7 @@
 ﻿import { state } from './state.js';
 import { CONFIG } from './config.js';
 import { BUILDINGS } from './buildings.js';
+import { formatValue } from './items.js';
 import { spawnParticles } from './effects.js';
 import { removeBuildingAt } from './actions.js';
 import { canvas } from './dom.js';
@@ -10,33 +11,44 @@ export function buildToolbar() {
     toolbar.innerHTML = '';
 
     const selBtn = document.createElement('button');
-    selBtn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-blue-900/20 rounded-lg border-2 border-blue-600 flex flex-col items-center justify-center ${state.selectedTool==='select'?'active':''}`;
+    selBtn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-blue-900/20 rounded-lg border-2 border-blue-600 flex flex-col items-center justify-center gap-0.5 ${state.selectedTool==='select'?'active':''}`;
     selBtn.onclick = () => { state.selectedTool = 'select'; closeInspector(); buildToolbar(); };
-    selBtn.innerHTML = `<div class="text-2xl mb-1 text-blue-400">⌖</div><div class="text-[10px] font-bold text-gray-300">Select</div>`;
+    selBtn.innerHTML = `<div class="text-2xl text-blue-400">↖</div><div class="text-[10px] font-bold text-gray-300 leading-none">Select</div>`;
     toolbar.appendChild(selBtn);
 
-    Object.keys(BUILDINGS).forEach(k => {
-        const b = BUILDINGS[k];
-        const btn = document.createElement('button');
-        const locked = b.locked;
-        btn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-gray-800 rounded-lg border-2 border-gray-600 flex flex-col items-center justify-center ${state.selectedTool===b.id && !locked ? 'active' : ''} ${locked ? 'locked' : ''}`;
-        if(!locked) btn.onclick = () => { state.selectedTool = b.id; closeInspector(); buildToolbar(); };
-        btn.innerHTML = `<div class="text-2xl mb-1" style="color:${b.color}">${locked ? '?' : b.symbol}</div><div class="text-[10px] font-bold text-gray-300">${locked ? 'Locked' : b.name}</div><div class="text-[9px] text-gray-500">${locked ? 'Research' : '$'+b.cost}</div>`;
-        toolbar.appendChild(btn);
+    const groups = [
+        ['belt', 'phase_belt', 'splitter', 'bridge', 'hopper', 'teleporter'],
+        ['miner', 'mixer', 'condenser', 'reactor'],
+        ['beacon']
+    ];
+
+    const unlocked = Object.values(BUILDINGS).filter(b => !b.locked);
+    groups.forEach(group => {
+        unlocked
+            .filter(b => group.includes(b.id))
+            .forEach(b => {
+                const btn = document.createElement('button');
+                btn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-gray-800 rounded-lg border-2 border-gray-600 flex flex-col items-center justify-center gap-0.5 ${state.selectedTool===b.id ? 'active' : ''}`;
+                btn.onclick = () => { state.selectedTool = b.id; closeInspector(); buildToolbar(); };
+                btn.innerHTML = `<div class="text-2xl" style="color:${b.color}">${b.symbol}</div><div class="text-[10px] font-bold text-gray-300 leading-none">${b.name}</div><div class="text-[8px] text-gray-500 leading-none">$${formatValue(b.cost)}</div>`;
+                toolbar.appendChild(btn);
+            });
     });
 
     const delBtn = document.createElement('button');
-    delBtn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-red-900/20 rounded-lg border-2 border-red-900 flex flex-col items-center justify-center ${state.selectedTool==='delete'?'active':''}`;
+    delBtn.className = `tool-btn flex-shrink-0 w-16 h-16 bg-red-900/20 rounded-lg border-2 border-red-900 flex flex-col items-center justify-center gap-0.5 ${state.selectedTool==='delete'?'active':''}`;
     delBtn.onclick = () => { state.selectedTool = 'delete'; closeInspector(); buildToolbar(); };
-    delBtn.innerHTML = `<div class="text-2xl mb-1 text-red-500">?</div><div class="text-[10px] font-bold text-gray-300">Remove</div>`;
+    delBtn.innerHTML = `<div class="text-2xl text-red-500">✕</div><div class="text-[10px] font-bold text-gray-300 leading-none">Remove</div>`;
     toolbar.appendChild(delBtn);
 }
 
+let lastTechEntropy = null;
+
 export function updateUI() {
-    document.getElementById('score-display').innerText = Math.floor(state.entropy);
+    document.getElementById('score-display').innerText = formatValue(state.entropy);
     document.getElementById('dm-display').innerText = `Dark Matter: ${state.darkMatter} (+${Math.round(state.darkMatter*1)}%)`;
     const epsEl = document.getElementById('eps-display');
-    if(epsEl) epsEl.innerText = `Entropy/s: ${state.entropyPerSecond.toFixed(1)}`;
+    if(epsEl) epsEl.innerText = `Entropy/s: ${formatValue(state.entropyPerSecond)}`;
     const singBtn = document.getElementById('singularity-btn');
     if(state.entropy >= CONFIG.PRESTIGE_THRESHOLD) {
         singBtn.classList.remove('hidden');
@@ -44,6 +56,14 @@ export function updateUI() {
     } else {
         singBtn.classList.add('hidden');
         singBtn.classList.remove('singularity-ready');
+    }
+
+    const techModal = document.getElementById('tech-modal');
+    if(techModal && !techModal.classList.contains('hidden')) {
+        if(lastTechEntropy === null || lastTechEntropy !== state.entropy) {
+            lastTechEntropy = state.entropy;
+            openTechTree();
+        }
     }
 }
 
@@ -119,7 +139,7 @@ export function updateInspector() {
 
     statsEl.innerText = speedText;
     const upgradeCost = Math.floor(bDef.cost * Math.pow(1.35, cell.level));
-    costEl.innerText = `$${upgradeCost}`;
+    costEl.innerText = `$${formatValue(upgradeCost)}`;
 
     document.getElementById('inspect-upgrade').onclick = () => {
         if(state.entropy >= upgradeCost) {
@@ -150,7 +170,7 @@ export function openTechTree() {
         const div = document.createElement('div');
         div.className = 'bg-gray-700 p-3 rounded flex justify-between items-center';
         const canAfford = state.entropy >= tech.cost;
-        div.innerHTML = `<div><div class="font-bold text-white">${tech.name}</div><div class="text-xs text-gray-400">${tech.desc}</div></div><button class="px-3 py-1 rounded text-sm font-bold ${canAfford ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}">$${tech.cost}</button>`;
+        div.innerHTML = `<div><div class="font-bold text-white">${tech.name}</div><div class="text-xs text-gray-400">${tech.desc}</div></div><button class="px-3 py-1 rounded text-sm font-bold ${canAfford ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}">$${formatValue(tech.cost)}</button>`;
         if(canAfford) {
             div.querySelector('button').onclick = () => {
                 if(state.entropy >= tech.cost) {
@@ -171,6 +191,9 @@ export function openTechTree() {
     });
     document.getElementById('tech-modal').classList.remove('hidden');
 }
+
+
+
 
 
 
