@@ -15,7 +15,7 @@ export function getTechTree(buildToolbar) {
             effect: () => { BUILDINGS.BRIDGE.locked = false; buildToolbar(); }
         },
         {
-            id: 'chemistry', name: 'Chemistry I', cost: 500,
+            id: 'chemistry1', name: 'Chemistry I', cost: 500,
             desc: 'Unlocks Mixers.', oneTime: true, prereq: [],
             effect: () => { BUILDINGS.MIXER.locked = false; buildToolbar(); }
         },
@@ -35,35 +35,50 @@ export function getTechTree(buildToolbar) {
             effect: () => { BUILDINGS.TELEPORTER.locked = false; buildToolbar(); }
         },
         {
+            id: 'logistics6', name: 'Logistics VI', cost: 80000,
+            desc: 'Unlocks Core Fragments (extend the core).', oneTime: true, prereq: ['logistics5'],
+            effect: () => { BUILDINGS.CORE_FRAGMENT.locked = false; buildToolbar(); }
+        },
+        {
             id: 'overclock', name: 'Overclocking', cost: 2500,
             desc: 'Unlocks Beacons.', oneTime: true, prereq: [],
             effect: () => { BUILDINGS.BEACON.locked = false; buildToolbar(); }
         },
         {
-            id: 'matter_gen', name: 'Matter Gen', cost: 10000,
-            desc: 'Unlocks Condensers.', oneTime: true, prereq: ['chemistry'],
+            id: 'chemistry2', name: 'Chemistry II', cost: 10000,
+            desc: 'Unlocks Condensers.', oneTime: true, prereq: ['chemistry1'],
             effect: () => { BUILDINGS.CONDENSER.locked = false; buildToolbar(); }
         },
         {
-            id: 'reactor_unlock', name: 'Nuclear Synthesis', cost: 50000,
-            desc: 'Unlocks Reactors (1 GREEN + 1 PURPLE ? 1 GOLD).', oneTime: true, prereq: ['matter_gen'],
+            id: 'chemistry3', name: 'Chemistry III', cost: 50000,
+            desc: 'Unlocks Reactors (1 GREEN + 1 PURPLE → 1 GOLD).', oneTime: true, prereq: ['chemistry2'],
             effect: () => { BUILDINGS.REACTOR.locked = false; buildToolbar(); }
+        },
+        {
+            id: 'chemistry4', name: 'Chemistry IV', cost: 100000,
+            desc: 'Unlocks Siphons.', oneTime: true, prereq: ['chemistry3'],
+            effect: () => { BUILDINGS.EXTRACTOR.locked = false; buildToolbar(); }
+        },
+        {
+            id: 'chemistry5', name: 'Chemistry V', cost: 200000,
+            desc: 'Unlocks Nullsources.', oneTime: true, prereq: ['chemistry4'],
+            effect: () => { BUILDINGS.DM_SOURCE.locked = false; buildToolbar(); }
         },
 
         // --- Infinite value research (late game scaling) ---
         {
             id: 'entropy_red', name: 'Red Entropy Amplification', cost: 5000,
-            desc: 'Increases Red fuel entropy gain by 1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
+            desc: 'Increases Red fuel entropy gain by ×1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
             effect: () => { ITEMS.RED.value *= 1.1; recomputePurpleValue(); }
         },
         {
             id: 'entropy_blue', name: 'Blue Entropy Amplification', cost: 5000,
-            desc: 'Increases Blue fuel entropy gain by 1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
+            desc: 'Increases Blue fuel entropy gain by ×1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
             effect: () => { ITEMS.BLUE.value *= 1.1; recomputePurpleValue(); }
         },
         {
             id: 'green_price', name: 'Green Fuel Refinement', cost: 8000,
-            desc: 'Increases Green fuel entropy gain by 1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
+            desc: 'Increases Green fuel entropy gain by ×1.1 (stackable).', oneTime: false, scale: 1.4, prereq: [],
             effect: () => { ITEMS.GREEN.value *= 1.1; recomputeGoldValue(); }
         },
 
@@ -79,7 +94,7 @@ export function getTechTree(buildToolbar) {
         },
         {
             id: 'quantum_fluctuation', name: 'Quantum Fluctuation', cost: 20000,
-            desc: 'Reactors have a small chance to output Dark Matter (+0.1% each upgrade).', oneTime: false, scale: 2.0, prereq: ['reactor_unlock'],
+            desc: 'Reactors have a small chance to output Dark Matter (+0.1% each upgrade).', oneTime: false, scale: 2.0, prereq: ['chemistry3'],
             effect: (s) => { s.tech.reactorDarkMatterChance += 0.001; }
         },
         {
@@ -93,5 +108,7 @@ export function getTechTree(buildToolbar) {
         }
     ];
 }
+
+
 
 

@@ -13,5 +13,8 @@ export function removeBuildingAt(cell) {
         cell.fuelMultiplier = 1;
         cell.fuelTimer = 0;
         cell.fuelQueue = [];
+        cell.splitterDupCooldown = 0;
+        cell.dmStored = 0;
+        cell.dmActive = false;
     }
 }

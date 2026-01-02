@@ -22,7 +22,8 @@ export const state = {
     isDragging: false,
     selectedCell: null,
     currentTechTree: [],
-    techCompleted: new Set()
+    techCompleted: new Set(),
+    lastBeltDir: 1
 };
 
 export function addEntropy(amount) {

@@ -4,7 +4,7 @@ import { ITEMS, BASE_ITEM_VALUES, recomputePurpleValue, recomputeGoldValue, form
 import { BUILDINGS } from './buildings.js';
 import { Cell, Item } from './classes.js';
 import { spawnParticles } from './effects.js';
-import { buildToolbar, closeInspector, updateUI, showNotification, showFloatText } from './ui.js';
+import { buildToolbar, closeInspector, updateUI, showNotification, showFloatText, resetTechUI, updateInspector } from './ui.js';
 import { resizeCanvas, draw } from './render.js';
 import { setupEventListeners } from './input.js';
 import { getTechTree } from './tech.js';
@@ -47,6 +47,7 @@ export function initGame(resetTech = false) {
         state.particles = [];
         state.tech = { beltSpeed: 1, minerSpeed: 1, spawnRate: 50, reactorDarkMatterChance: 0.001 };
         state.techCompleted = new Set();
+        state.lastBeltDir = 1;
         ITEMS.RED.value = BASE_ITEM_VALUES.RED;
         ITEMS.BLUE.value = BASE_ITEM_VALUES.BLUE;
         ITEMS.GREEN.value = BASE_ITEM_VALUES.GREEN;
@@ -56,6 +57,7 @@ export function initGame(resetTech = false) {
             if(k !== 'BELT' && k !== 'MINER') BUILDINGS[k].locked = true;
         });
         state.currentTechTree = getTechTree(buildToolbar);
+        resetTechUI();
     }
 
     state.grid = [];
@@ -91,10 +93,10 @@ export function initGame(resetTech = false) {
 function isValidMove(tx, ty, item, reserved) {
     if(tx < 0 || tx >= state.width || ty < 0 || ty >= state.height) return false;
     const target = state.grid[ty][tx];
-    if(target.type === 'core') return true;
+    if(target.type === 'core' || target.type === 'core_fragment') return true;
     if(target.type === 'miner' || target.type.startsWith('source')) return false;
     if(target.type === 'condenser') return false;
-    const limit = getCellCapacity(target.type);
+    const limit = getCellCapacity(target);
     if(limit === 1 && isCellOccupied(tx, ty, item, reserved)) return false;
     if(limit > 1 && getItemCountAt(tx, ty, item, reserved) >= limit) return false;
     return true;
@@ -111,7 +113,7 @@ function spawnItem(typeObj, x, y, dir = -1, reserved = null) {
             const it = new Item(typeObj, x, y);
             it.targetCell = { x: nx, y: ny };
             state.items.push(it);
-            if(getCellCapacity(state.grid[ny][nx].type) === 1) reservations.add(cellKey(nx, ny));
+            if(getCellCapacity(state.grid[ny][nx]) === 1) reservations.add(cellKey(nx, ny));
         }
     } else {
         if(state.grid[y][x].type === 'phase_belt' || !isCellOccupied(x, y, null, reservations)) {
@@ -124,7 +126,7 @@ function consumeItem(item) {
     if(item.type === ITEMS.DARK_MATTER) {
         state.darkMatter += 1;
         showFloatText('+1 DM', item.x, item.y, item.type.color);
-        spawnParticles(item.x, item.y, '#7c3aed', 3);
+        spawnParticles(item.x, item.y, '#000000', 3);
         return;
     }
 
@@ -144,7 +146,7 @@ function buildReservationSet() {
     for(const it of state.items) {
         if(it.targetCell) {
             const target = state.grid[it.targetCell.y]?.[it.targetCell.x];
-            if(!target || target.type !== 'phase_belt') {
+            if(getCellCapacity(target) === 1) {
                 reserved.add(cellKey(it.targetCell.x, it.targetCell.y));
             }
         }
@@ -159,9 +161,12 @@ function isCellOccupied(x, y, ignoreItem, reserved) {
     return false;
 }
 
-function getCellCapacity(type) {
-    if(type === 'phase_belt') return 10;
-    if(type === 'bridge') return 5;
+function getCellCapacity(cell) {
+    if(!cell) return 1;
+    if(cell.type === 'core' || cell.type === 'core_fragment') return Infinity;
+    if(cell.type === 'phase_belt') return 10;
+    if(cell.type === 'bridge') return 5;
+    if(cell.type === 'teleporter') return Math.min(10, Math.max(1, cell.level));
     return 1;
 }
 
@@ -169,6 +174,7 @@ function getItemCountAt(x, y, ignoreItem, reserved) {
     let count = 0;
     for(const it of state.items) {
         if(it !== ignoreItem && it.x === x && it.y === y) count++;
+        if(it !== ignoreItem && it.targetCell && it.targetCell.x === x && it.targetCell.y === y) count++;
     }
     if(reserved && reserved.has(cellKey(x, y))) count++;
     return count;
@@ -185,6 +191,13 @@ function findTeleporterDestinations(channel, excludeCell) {
         }
     }
     return matches;
+}
+
+function getDmTarget(mode) {
+    if(mode === 2) return 300;
+    if(mode === 3) return 600;
+    if(mode === 4) return 500;
+    return 150;
 }
 
 function getItemKey(item) {
@@ -207,7 +220,9 @@ function serializeState() {
             fuelMultiplier: cell.fuelMultiplier,
             fuelTimer: cell.fuelTimer,
             fuelQueue: cell.fuelQueue,
-            channel: cell.channel,
+            splitterDupCooldown: cell.splitterDupCooldown,
+            dmStored: cell.dmStored,
+            dmActive: cell.dmActive,
             splitterIndex: cell.splitterIndex,
             processing: cell.processing,
             sourceType: getItemKey(cell.sourceType),
@@ -284,6 +299,7 @@ export function loadGame() {
         state.entropyEarned = 0;
         state.entropyEarnedTime = 0;
         state.entropyPerSecond = 0;
+        state.lastBeltDir = 1;
 
         ITEMS.RED.value = data.itemsValues?.RED ?? BASE_ITEM_VALUES.RED;
         ITEMS.BLUE.value = data.itemsValues?.BLUE ?? BASE_ITEM_VALUES.BLUE;
@@ -294,6 +310,7 @@ export function loadGame() {
             if(k !== 'BELT' && k !== 'MINER') BUILDINGS[k].locked = true;
         });
         state.currentTechTree = getTechTree(buildToolbar);
+        resetTechUI();
         state.currentTechTree.forEach(tech => {
             if(data.techCosts && typeof data.techCosts[tech.id] === 'number') {
                 tech.cost = data.techCosts[tech.id];
@@ -320,7 +337,9 @@ export function loadGame() {
                     cell.fuelMultiplier = cellData.fuelMultiplier ?? 1;
                     cell.fuelTimer = cellData.fuelTimer ?? 0;
                     cell.fuelQueue = Array.isArray(cellData.fuelQueue) ? cellData.fuelQueue.slice(0, 10) : [];
-                    cell.channel = cellData.channel ?? 1;
+                    cell.splitterDupCooldown = cellData.splitterDupCooldown ?? 0;
+                    cell.dmStored = cellData.dmStored ?? 0;
+                    cell.dmActive = cellData.dmActive ?? false;
                     cell.splitterIndex = cellData.splitterIndex ?? 0;
                     cell.processing = cellData.processing ?? 0;
                     cell.sourceType = getItemByKey(cellData.sourceType);
@@ -372,6 +391,10 @@ function update(dt) {
         for(let x = 0; x < state.width; x++) {
             const cell = state.grid[y][x];
 
+            if(cell.type === 'splitter' && cell.splitterDupCooldown > 0) {
+                cell.splitterDupCooldown = Math.max(0, cell.splitterDupCooldown - dt);
+            }
+
             if(cell.type === 'beacon') {
                 if(cell.fuelTimer > 0) {
                     cell.fuelTimer -= dt;
@@ -412,6 +435,38 @@ function update(dt) {
                 if(cell.sourceType === ITEMS.RED) threshold *= 2;
                 if(cell.processing >= threshold) {
                     if(cell.sourceType) { spawnItem(cell.sourceType, x, y, -1, reservations); cell.processing = 0; }
+                }
+            }
+
+            if(cell.type === 'extractor') {
+                const adjacentCore = (x > 0 && state.grid[y][x - 1].type === 'core')
+                    || (x < state.width - 1 && state.grid[y][x + 1].type === 'core')
+                    || (y > 0 && state.grid[y - 1][x].type === 'core')
+                    || (y < state.height - 1 && state.grid[y + 1][x].type === 'core');
+                if(adjacentCore && state.darkMatter > 0) {
+                    cell.processing += speedMult * (1 + (cell.level - 1) * 0.2);
+                    if(cell.processing >= 60) {
+                        state.darkMatter = Math.max(0, state.darkMatter - 1);
+                        spawnItem(ITEMS.DARK_MATTER, x, y, cell.dir, reservations);
+                        cell.processing = 0;
+                    }
+                } else {
+                    cell.processing = 0;
+                }
+            }
+
+            if(cell.type === 'dm_source') {
+                const target = getDmTarget(cell.mode);
+                if(cell.dmStored >= target) {
+                    const outItem = cell.mode === 1 ? ITEMS.BLUE : (cell.mode === 2 ? ITEMS.RED : (cell.mode === 3 ? ITEMS.GREEN : ITEMS.PURPLE));
+                    cell.type = `source_${cell.mode === 1 ? 'blue' : (cell.mode === 2 ? 'red' : (cell.mode === 3 ? 'green' : 'purple'))}`;
+                    cell.sourceType = outItem;
+                    cell.dmStored = 0;
+                    cell.dmActive = false;
+                    cell.processing = 0;
+                    spawnParticles(x, y, outItem.color, 6);
+                } else {
+                    cell.processing = 0;
                 }
             }
 
@@ -481,6 +536,16 @@ function update(dt) {
         const item = state.items[i];
         const cell = state.grid[item.y][item.x];
 
+        if(item.teleportCooldown > 0) {
+            item.teleportCooldown = Math.max(0, item.teleportCooldown - dt);
+        }
+
+        if(cell.type === 'core' || cell.type === 'core_fragment') {
+            consumeItem(item);
+            state.items.splice(i, 1);
+            continue;
+        }
+
         if(cell.type === 'empty' || cell.type.startsWith('source')) {
             item.decay += dt;
             if(item.decay > 10) {
@@ -495,15 +560,15 @@ function update(dt) {
         const cellLevel = (cell.type === 'belt' || cell.type === 'phase_belt' || cell.type === 'bridge' || cell.type === 'hopper') ? cell.level : 1;
         const speed = 0.05 * state.tech.beltSpeed * (1 + (cellLevel-1)*0.1);
 
-        if(cell.type === 'teleporter' && !item.targetCell) {
+        if(cell.type === 'teleporter' && !item.targetCell && item.teleportCooldown <= 0) {
             const destinations = findTeleporterDestinations(cell.channel, cell);
-                if(destinations.length > 0) {
-                    let destCell;
-                    if(destinations.length <= 2) {
-                        destCell = destinations[0];
-                    } else {
-                        destCell = destinations[Math.floor(Math.random() * destinations.length)];
-                    }
+            if(destinations.length > 0) {
+                let destCell;
+                if(destinations.length <= 2) {
+                    destCell = destinations[0];
+                } else {
+                    destCell = destinations[Math.floor(Math.random() * destinations.length)];
+                }
                 if(destCell) {
                     if(!isCellOccupied(destCell.x, destCell.y, item, reservations)) {
                         item.x = destCell.x;
@@ -512,6 +577,7 @@ function update(dt) {
                         item.targetCell = null;
                         item.moveDir = destCell.dir;
                         reservations.add(cellKey(destCell.x, destCell.y));
+                        item.teleportCooldown = 0.3;
                         item.stuck = false;
                         continue;
                     }
@@ -522,8 +588,9 @@ function update(dt) {
 
         if(!item.targetCell) {
             let dx = 0, dy = 0;
+            let chosenDir = null;
 
-            if(cell.type === 'belt' || cell.type === 'miner' || cell.type === 'mixer' || cell.type.startsWith('source') || cell.type === 'hopper') {
+            if(cell.type === 'belt' || cell.type === 'teleporter' || cell.type === 'miner' || cell.type === 'mixer' || cell.type.startsWith('source') || cell.type === 'hopper') {
                 item.moveDir = cell.dir;
                 dx = DIRS[item.moveDir].x;
                 dy = DIRS[item.moveDir].y;
@@ -550,6 +617,7 @@ function update(dt) {
                         item.moveDir = tryDir;
                         dx = DIRS[tryDir].x;
                         dy = DIRS[tryDir].y;
+                        chosenDir = tryDir;
                         cell.splitterIndex = (idx + 1) % 3;
                         found = true;
                         break;
@@ -564,12 +632,6 @@ function update(dt) {
             if(dx !== 0 || dy !== 0) {
                 if(isValidMove(nextX, nextY, item, reservations)) {
                     const nextCell = state.grid[nextY][nextX];
-
-                    if(nextCell.type === 'core') {
-                        consumeItem(item);
-                        state.items.splice(i, 1);
-                        continue;
-                    }
 
                     if(nextCell.type === 'mixer') {
                         if(item.type === ITEMS.RED && nextCell.buffer.red < 5) {
@@ -609,9 +671,56 @@ function update(dt) {
                         spawnParticles(nextX, nextY, item.type.color, 4);
                         continue;
                     }
+                    if(nextCell.type === 'dm_source') {
+                        if(item.type === ITEMS.DARK_MATTER) {
+                            nextCell.dmStored += 1;
+                            const target = getDmTarget(nextCell.mode);
+                            if(nextCell.dmStored >= target) {
+                                const outItem = nextCell.mode === 1 ? ITEMS.BLUE : (nextCell.mode === 2 ? ITEMS.RED : (nextCell.mode === 3 ? ITEMS.GREEN : ITEMS.PURPLE));
+                                nextCell.type = `source_${nextCell.mode === 1 ? 'blue' : (nextCell.mode === 2 ? 'red' : (nextCell.mode === 3 ? 'green' : 'purple'))}`;
+                                nextCell.sourceType = outItem;
+                                nextCell.dmStored = 0;
+                                nextCell.dmActive = false;
+                                nextCell.processing = 0;
+                                spawnParticles(nextX, nextY, outItem.color, 6);
+                            }
+                            state.items.splice(i, 1);
+                            spawnParticles(nextX, nextY, item.type.color, 4);
+                            if(state.selectedCell === nextCell) updateInspector();
+                            continue;
+                        }
+                        item.stuck = true;
+                        continue;
+                    }
                     item.targetCell = { x: nextX, y: nextY };
-                    if(getCellCapacity(nextCell.type) === 1) reservations.add(cellKey(nextX, nextY));
+                    if(getCellCapacity(nextCell) === 1) reservations.add(cellKey(nextX, nextY));
                     item.stuck = false;
+                    if(cell.type === 'splitter' && chosenDir !== null && cell.level > 1 && cell.splitterDupCooldown <= 0 && item.type !== ITEMS.DARK_MATTER) {
+                        const doubleChance = Math.min(0.5, (cell.level - 1) * 0.01);
+                        const tripleChance = Math.min(0.2, (cell.level - 1) * 0.002);
+                        const roll = Math.random();
+                        let extraCount = 0;
+                        if(roll < tripleChance) extraCount = 2;
+                        else if(roll < tripleChance + doubleChance) extraCount = 1;
+                        if(extraCount > 0) {
+                            const outputs = [(cell.dir + 3) % 4, cell.dir, (cell.dir + 1) % 4];
+                            const altDirs = outputs.filter(d => d !== chosenDir);
+                            let spawned = 0;
+                            for(let n = 0; n < extraCount; n++) {
+                                const outDir = altDirs[n % altDirs.length];
+                                const nx = item.x + DIRS[outDir].x;
+                                const ny = item.y + DIRS[outDir].y;
+                                if(isValidMove(nx, ny, item, reservations)) {
+                                    spawnItem(item.type, item.x, item.y, outDir, reservations);
+                                    spawned++;
+                                }
+                            }
+                            if(spawned > 0) {
+                                cell.splitterDupCooldown = 10;
+                                spawnParticles(item.x, item.y, item.type.color, 6);
+                            }
+                        }
+                    }
                 } else {
                     item.stuck = true;
                 }
@@ -677,6 +786,9 @@ export function resumeGame() {
     state.lastTick = Date.now();
     gameLoop();
 }
+
+
+
 
 
 

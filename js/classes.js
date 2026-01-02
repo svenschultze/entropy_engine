@@ -15,6 +15,9 @@
         this.fuelMultiplier = 1;
         this.fuelTimer = 0;
         this.fuelQueue = [];
+        this.splitterDupCooldown = 0;
+        this.dmStored = 0;
+        this.dmActive = false;
     }
 }
 
@@ -29,6 +32,7 @@ export class Item {
         this.stuck = false;
         this.decay = 0;
         this.id = Math.random().toString(36).substr(2, 9);
+        this.teleportCooldown = 0;
     }
 }
 

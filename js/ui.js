@@ -18,7 +18,7 @@ export function buildToolbar() {
 
     const groups = [
         ['belt', 'phase_belt', 'splitter', 'bridge', 'hopper', 'teleporter'],
-        ['miner', 'mixer', 'condenser', 'reactor'],
+        ['miner', 'mixer', 'condenser', 'reactor', 'extractor', 'dm_source', 'core_fragment'],
         ['beacon']
     ];
 
@@ -43,6 +43,13 @@ export function buildToolbar() {
 }
 
 let lastTechEntropy = null;
+let techUiBuilt = false;
+const techRowMap = new Map();
+
+export function resetTechUI() {
+    techUiBuilt = false;
+    techRowMap.clear();
+}
 
 export function updateUI() {
     document.getElementById('score-display').innerText = formatValue(state.entropy);
@@ -62,7 +69,7 @@ export function updateUI() {
     if(techModal && !techModal.classList.contains('hidden')) {
         if(lastTechEntropy === null || lastTechEntropy !== state.entropy) {
             lastTechEntropy = state.entropy;
-            openTechTree();
+            refreshTechTree();
         }
     }
 }
@@ -79,10 +86,11 @@ export function showFloatText(text, gx, gy, color) {
     el.style.color = color;
     el.innerText = text;
     const T = state.scale * CONFIG.TILE_SIZE;
+    const rect = canvas.getBoundingClientRect();
     const OX = (canvas.width - state.width * T) / 2;
     const OY = (canvas.height - state.height * T) / 2;
-    el.style.left = (OX + gx * T + T/2) + 'px';
-    el.style.top = (OY + gy * T) + 'px';
+    el.style.left = (rect.left + OX + gx * T + T/2) + 'px';
+    el.style.top = (rect.top + OY + gy * T) + 'px';
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1000);
 }
@@ -116,10 +124,33 @@ export function updateInspector() {
     if(cell.type === 'miner' || cell.type === 'mixer' || cell.type === 'belt' || cell.type === 'phase_belt') {
         speedText = `Speed: ${(1 + (cell.level-1)*0.2).toFixed(1)}x`;
     }
-    if(cell.type === 'beacon') speedText = `Buff: +${(cell.level*20)}%`;
+    if(cell.type === 'splitter') {
+        const doubleChance = Math.min(50, (cell.level - 1) * 1);
+        const tripleChance = Math.min(20, (cell.level - 1) * 0.2);
+        speedText = `Dup: +${doubleChance.toFixed(1)}% (2x), +${tripleChance.toFixed(1)}% (3x)`;
+    }
+    if(cell.type === 'beacon') {
+        const fuelNote = cell.fuelTimer > 0 ? ` (Fuel x${cell.fuelMultiplier.toFixed(1)} | ${Math.ceil(cell.fuelTimer)}s)` : '';
+        const fuelQueue = cell.fuelQueue && cell.fuelQueue.length ? ` (Queue: ${cell.fuelQueue.length}/10)` : '';
+        speedText = `Buff: +${(cell.level*20)}%${fuelNote}${fuelQueue}`;
+    }
     if(cell.type === 'bridge') speedText = 'Crossing (non-directional)';
-    if(cell.type === 'reactor') speedText = 'Converts: 1 GREEN + 1 PURPLE → 1 GOLD';
+    if(cell.type === 'reactor') {
+        const chance = state.tech.reactorDarkMatterChance * 100;
+        speedText = `Converts: 1 GREEN + 1 PURPLE -> 1 GOLD (DM: ${chance.toFixed(1)}%)`;
+    }
     if(cell.type === 'hopper') speedText = 'Range: 3x3';
+    if(cell.type === 'core_fragment') speedText = 'Core Extension';
+    if(cell.type === 'extractor') speedText = `Extracts DM: ${cell.level}/s`;
+    if(cell.type === 'dm_source') {
+        const target = cell.mode === 1 ? 150 : (cell.mode === 2 ? 300 : (cell.mode === 3 ? 600 : 500));
+        const modeName = cell.mode === 1 ? 'BLUE' : (cell.mode === 2 ? 'RED' : (cell.mode === 3 ? 'GREEN' : 'PURPLE'));
+        speedText = `Charging: ${cell.dmStored}/${target} (${modeName})`;
+        actionBtn.classList.remove('hidden');
+        actionBtn.style.backgroundColor = cell.mode === 1 ? '#55aaff' : (cell.mode === 2 ? '#ff5555' : (cell.mode === 3 ? '#22c55e' : '#d884ff'));
+        actionBtn.innerText = 'CYCLE MODE';
+        actionBtn.onclick = () => { cell.mode = (cell.mode % 4) + 1; updateInspector(); };
+    }
     if(cell.type === 'teleporter') {
         speedText = `Channel: ${cell.channel}`;
         actionBtn.classList.remove('hidden');
@@ -160,41 +191,61 @@ export function updateInspector() {
 }
 
 export function openTechTree() {
-    const list = document.getElementById('tech-list');
-    list.innerHTML = '';
-    state.currentTechTree.forEach(tech => {
-        if(tech.oneTime && state.techCompleted.has(tech.id)) return;
-        const prereq = tech.prereq || [];
-        const hasPrereq = prereq.every(id => state.techCompleted.has(id));
-        if(!hasPrereq) return;
-        const div = document.createElement('div');
-        div.className = 'bg-gray-700 p-3 rounded flex justify-between items-center';
-        const canAfford = state.entropy >= tech.cost;
-        div.innerHTML = `<div><div class="font-bold text-white">${tech.name}</div><div class="text-xs text-gray-400">${tech.desc}</div></div><button class="px-3 py-1 rounded text-sm font-bold ${canAfford ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}">$${formatValue(tech.cost)}</button>`;
-        if(canAfford) {
-            div.querySelector('button').onclick = () => {
-                if(state.entropy >= tech.cost) {
-                    state.entropy -= tech.cost;
-                    if(tech.oneTime) {
-                        tech.effect(state);
-                        state.techCompleted.add(tech.id);
-                        openTechTree();
-                    } else {
-                        tech.effect(state);
-                        tech.cost = Math.floor(tech.cost * tech.scale);
-                        openTechTree();
-                    }
-                }
-            };
-        }
-        list.appendChild(div);
-    });
+    buildTechTree();
+    refreshTechTree();
     document.getElementById('tech-modal').classList.remove('hidden');
 }
 
+function buildTechTree() {
+    if(techUiBuilt) return;
+    const list = document.getElementById('tech-list');
+    list.innerHTML = '';
+    techRowMap.clear();
+    state.currentTechTree.forEach(tech => {
+        const row = document.createElement('div');
+        row.className = 'bg-gray-700 p-3 rounded flex justify-between items-center';
+        const info = document.createElement('div');
+        info.innerHTML = `<div class="font-bold text-white">${tech.name}</div><div class="text-xs text-gray-400">${tech.desc}</div>`;
+        const btn = document.createElement('button');
+        btn.className = 'px-3 py-1 rounded text-sm font-bold';
+        btn.onclick = () => {
+            if(state.entropy >= tech.cost) {
+                state.entropy -= tech.cost;
+                if(tech.oneTime) {
+                    tech.effect(state);
+                    state.techCompleted.add(tech.id);
+                } else {
+                    tech.effect(state);
+                    tech.cost = Math.floor(tech.cost * tech.scale);
+                }
+                refreshTechTree();
+            }
+        };
+        row.appendChild(info);
+        row.appendChild(btn);
+        list.appendChild(row);
+        techRowMap.set(tech.id, { row, btn, tech });
+    });
+    techUiBuilt = true;
+}
 
-
-
-
-
-
+function refreshTechTree() {
+    techRowMap.forEach(({ row, btn, tech }) => {
+        const prereq = tech.prereq || [];
+        const hasPrereq = prereq.every(id => state.techCompleted.has(id));
+        const isDone = tech.oneTime && state.techCompleted.has(tech.id);
+        if(!hasPrereq || isDone) {
+            row.classList.add('hidden');
+            return;
+        }
+        row.classList.remove('hidden');
+        const canAfford = state.entropy >= tech.cost;
+        btn.innerText = `$${formatValue(tech.cost)}`;
+        btn.classList.toggle('bg-blue-600', canAfford);
+        btn.classList.toggle('hover:bg-blue-500', canAfford);
+        btn.classList.toggle('text-white', canAfford);
+        btn.classList.toggle('bg-gray-600', !canAfford);
+        btn.classList.toggle('text-gray-400', !canAfford);
+        btn.classList.toggle('cursor-not-allowed', !canAfford);
+    });
+}

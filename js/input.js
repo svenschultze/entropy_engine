@@ -1,5 +1,5 @@
 ﻿import { state, addEntropy } from './state.js';
-import { CONFIG } from './config.js';
+import { CONFIG, DIRS } from './config.js';
 import { BUILDINGS } from './buildings.js';
 import { spawnParticles } from './effects.js';
 import { removeBuildingAt } from './actions.js';
@@ -46,17 +46,35 @@ function handleInteract(gx, gy) {
                 showNotification('Needs Ore!');
                 return;
             }
+            if(building.id === 'extractor') {
+                const adjacentCore = (gx > 0 && state.grid[gy][gx - 1].type === 'core')
+                    || (gx < state.width - 1 && state.grid[gy][gx + 1].type === 'core')
+                    || (gy > 0 && state.grid[gy - 1][gx].type === 'core')
+                    || (gy < state.height - 1 && state.grid[gy + 1][gx].type === 'core');
+                if(!adjacentCore) {
+                    showNotification('Must be adjacent to Core!');
+                    return;
+                }
+            }
             state.entropy -= building.cost;
             const keptSource = cell.sourceType;
             cell.type = building.id;
             cell.sourceType = keptSource;
-            cell.dir = 1;
+            if(building.id === 'belt' || building.id === 'phase_belt') {
+                cell.dir = getAutoBeltDir(gx, gy);
+                state.lastBeltDir = cell.dir;
+            } else {
+                cell.dir = 1;
+            }
             spawnParticles(gx, gy, '#ffffff', 5);
         } else {
             showNotification('Not enough Entropy!');
         }
     } else if (cell.type === building.id) {
         cell.dir = (cell.dir + 1) % 4;
+        if(cell.type === 'belt' || cell.type === 'phase_belt') {
+            state.lastBeltDir = cell.dir;
+        }
         if(state.selectedCell === cell) updateInspector();
     } else {
         openInspector(cell);
@@ -111,8 +129,10 @@ export function setupEventListeners({ onSingularityConfirm }) {
 
     document.getElementById('tech-btn').onclick = openTechTree;
     document.getElementById('close-tech').onclick = () => document.getElementById('tech-modal').classList.add('hidden');
-    document.getElementById('help-btn').onclick = () => document.getElementById('help-modal').classList.remove('hidden');
-    document.getElementById('close-help').onclick = () => document.getElementById('help-modal').classList.add('hidden');
+    const helpBtn = document.getElementById('help-btn');
+    if(helpBtn) helpBtn.onclick = () => document.getElementById('help-modal').classList.remove('hidden');
+    const closeHelp = document.getElementById('close-help');
+    if(closeHelp) closeHelp.onclick = () => document.getElementById('help-modal').classList.add('hidden');
     document.getElementById('inspect-close').onclick = closeInspector;
 
     const singModal = document.getElementById('singularity-modal');
@@ -127,5 +147,24 @@ export function setupEventListeners({ onSingularityConfirm }) {
         onSingularityConfirm();
     };
 }
+
+function getAutoBeltDir(x, y) {
+    const beltDirs = [];
+    for(let d = 0; d < DIRS.length; d++) {
+        const nx = x + DIRS[d].x;
+        const ny = y + DIRS[d].y;
+        if(nx < 0 || nx >= state.width || ny < 0 || ny >= state.height) continue;
+        const neighbor = state.grid[ny][nx];
+        if(neighbor.type === 'belt' || neighbor.type === 'phase_belt') beltDirs.push(d);
+    }
+    if(beltDirs.length) {
+        const preferred = (state.lastBeltDir || 1);
+        const match = beltDirs.find(d => (d + 2) % 4 === preferred);
+        const chosen = match !== undefined ? match : beltDirs[0];
+        return (chosen + 2) % 4;
+    }
+    return state.lastBeltDir || 1;
+}
+
 
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -12,11 +12,11 @@
 <div id="error-log"></div>
 
 <div id="game-container">
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" class="block"></canvas>
 
     <div id="ui-layer" class="p-4">
         <!-- Top Bar -->
-        <div class="flex justify-between items-start pointer-events-auto bg-gray-900/80 p-3 rounded-lg border border-gray-700 backdrop-blur-sm shadow-xl">
+        <div id="top-bar" class="flex justify-between items-start pointer-events-auto bg-gray-900/80 p-3 rounded-lg border border-gray-700 backdrop-blur-sm shadow-xl">
             <div>
                 <div class="text-xs text-gray-400 uppercase tracking-widest">Entropy</div>
                 <div class="text-2xl font-bold text-blue-400" id="score-display">0</div>
@@ -30,7 +30,7 @@
                  <button id="tech-btn" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-xs font-bold shadow-lg shadow-purple-900/50 transition-all">
                     RESEARCH
                 </button>
-                <button id="help-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs font-bold transition-all w-8 h-8 flex items-center justify-center">?</button>
+                
             </div>
         </div>
 
@@ -61,7 +61,7 @@
             </div>
 
             <!-- Build Menu -->
-            <div class="pointer-events-auto bg-gray-900/95 border-t border-gray-700 backdrop-blur-md pb-2 pt-2">
+            <div id="bottom-bar" class="pointer-events-auto bg-gray-900/95 border-t border-gray-700 backdrop-blur-md pb-2 pt-2">
                 <div class="flex overflow-x-auto p-2 gap-2" id="toolbar" style="scrollbar-width: none;">
                     <!-- Buttons injected by JS -->
                 </div>
@@ -119,4 +119,5 @@
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
+
 
